@@ -42,3 +42,46 @@ function changeBackgroundColor() {
   console.log("배경색이 변경되었습니다:", newColor);
   return "배경색 변경 완료: " + newColor;
 }
+
+document.getElementById("captureButton").addEventListener("click", async () => {
+  console.log("캡처 버튼이 클릭되었습니다.");
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    console.log("현재 탭:", tab);
+
+    if (!tab?.id) {
+      console.log("유효한 탭 ID를 찾을 수 없습니다.");
+      return;
+    }
+
+    if (tab.url.startsWith("chrome://")) {
+      console.log("chrome:// URL에는 접근할 수 없습니다.");
+      alert("이 페이지는 캡처할 수 없습니다. 일반 웹 페이지에서 시도해 주세요.");
+      return;
+    }
+
+    console.log("캡처 시도...");
+    chrome.tabs.captureVisibleTab(null, { format: "png" }, (dataUrl) => {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `capture-${timestamp}.png`;
+
+      chrome.downloads.download(
+        {
+          url: dataUrl,
+          filename: filename,
+          saveAs: true,
+        },
+        (downloadId) => {
+          if (chrome.runtime.lastError) {
+            console.error("다운로드 오류:", chrome.runtime.lastError);
+          } else {
+            console.log("캡처 완료. 다운로드 ID:", downloadId);
+          }
+        }
+      );
+    });
+  } catch (err) {
+    console.error("오류 발생:", err);
+    console.error("오류 스택:", err.stack);
+  }
+});

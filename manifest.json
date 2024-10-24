@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "배경색 변경 확장 프로그램",
+  "name": "웹 페이지 캡처 확장 프로그램",
   "version": "1.0",
-  "description": "웹 페이지의 배경색을 변경하는 확장 프로그램",
-  "permissions": ["activeTab", "scripting"],
+  "description": "현재 웹 페이지를 캡처하여 저장하는 확장 프로그램",
+  "permissions": ["activeTab", "scripting", "downloads"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup.html",

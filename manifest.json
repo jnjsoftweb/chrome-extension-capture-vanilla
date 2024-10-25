@@ -3,7 +3,7 @@
   "name": "웹 페이지 전체 캡처 확장 프로그램",
   "version": "1.0",
   "description": "현재 웹 페이지 전체를 캡처하여 저장하는 확장 프로그램",
-  "permissions": ["activeTab", "scripting", "downloads"],
+  "permissions": ["activeTab", "scripting", "downloads", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"

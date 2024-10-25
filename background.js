@@ -47,18 +47,19 @@ async function captureFullPage(tab) {
   );
 
   let captures = [];
+  const overlap = 100; // 오버랩 픽셀 수 증가
 
   for (let i = 0; i < totalScrolls; i++) {
-    const scrollY = i * clientHeight;
+    const scrollY = i * (clientHeight - overlap);
     await sendMessageToContentScript(tab.id, { action: "scrollToPosition", scrollY });
 
     // 스크롤 후 페이지가 렌더링될 때까지 기다립니다.
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    console.log(`캡처 중: ${i + 1}/${totalScrolls}`);
+    console.log(`캡처 중: ${i + 1}/${totalScrolls}, 스크롤 위치: ${scrollY}`);
     let dataUrl = await new Promise((resolve) => {
-      chrome.tabs.captureVisibleTab(null, { format: "png" }, (dataUrl) => {
-        console.log("캡처된 이미지 URL 길이:", dataUrl.length);
+      chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }, (dataUrl) => {
+        console.log("캡처된 이미지 URL 길이:", dataUrl ? dataUrl.length : "undefined");
         resolve(dataUrl);
       });
     });
@@ -83,6 +84,20 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
+async function createFullPageImage(captures, scrollWidth, scrollHeight) {
+  let fullPageCanvas = new OffscreenCanvas(scrollWidth, scrollHeight);
+  let ctx = fullPageCanvas.getContext("2d", { willReadFrequently: true });
+
+  let currentY = 0;
+  for (let i = 0; i < captures.length; i++) {
+    let img = await createImageBitmap(await (await fetch(captures[i].dataUrl)).blob());
+    ctx.drawImage(img, 0, currentY);
+    currentY += img.height;
+  }
+
+  return fullPageCanvas.convertToBlob();
+}
+
 chrome.action.onClicked.addListener(async (tab) => {
   if (tab.url.startsWith("chrome://")) {
     console.log("chrome:// URL에는 접근할 수 없습니다.");
@@ -96,6 +111,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
+    // 개별 이미지 저장
     for (let i = 0; i < captures.length; i++) {
       const filename = `full-page-capture-${timestamp}-part${i + 1}.png`;
 
@@ -115,7 +131,39 @@ chrome.action.onClicked.addListener(async (tab) => {
       );
     }
 
-    console.log("모든 캡처 이미지 저장 요청 완료");
+    // 전체 이미지 생성 및 저장
+    console.log("전체 이미지 생성 시작...");
+    const { scrollWidth, scrollHeight } = await sendMessageToContentScript(tab.id, { action: "getPageDimensions" });
+    const fullPageBlob = await createFullPageImage(captures, scrollWidth, scrollHeight);
+    console.log("전체 이미지 생성 완료, 크기:", fullPageBlob.size);
+
+    const fullPageFilename = `full-page-capture-${timestamp}-full.png`;
+
+    // Blob을 ArrayBuffer로 변환
+    const arrayBuffer = await fullPageBlob.arrayBuffer();
+
+    // ArrayBuffer를 base64 문자열로 변환
+    const base64 = arrayBufferToBase64(arrayBuffer);
+
+    // data URL 생성
+    const dataUrl = `data:image/png;base64,${base64}`;
+
+    chrome.downloads.download(
+      {
+        url: dataUrl,
+        filename: fullPageFilename,
+        saveAs: false,
+      },
+      (downloadId) => {
+        if (chrome.runtime.lastError) {
+          console.error("전체 이미지 다운로드 오류:", chrome.runtime.lastError);
+        } else {
+          console.log("전체 이미지 저장 완료. 다운로드 ID:", downloadId);
+        }
+      }
+    );
+
+    console.log("모든 캡처 이미지 및 전체 이미지 저장 요청 완료");
   } catch (error) {
     console.error("캡처 중 오류 발생:", error);
     console.error("오류 스택:", error.stack);

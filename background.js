@@ -85,29 +85,84 @@ function arrayBufferToBase64(buffer) {
 }
 
 async function createFullPageImage(captures) {
-  // 전체 높이 계산
+  console.log("createFullPageImage 시작");
   let totalHeight = 0;
   let maxWidth = 0;
   const images = await Promise.all(
-    captures.map(async (capture) => {
+    captures.map(async (capture, index) => {
       const img = await createImageBitmap(await (await fetch(capture.dataUrl)).blob());
+      console.log(`이미지 ${index + 1} 로드 완료: ${img.width}x${img.height}`);
       totalHeight += img.height;
       maxWidth = Math.max(maxWidth, img.width);
       return img;
     })
   );
 
+  console.log(`전체 이미지 크기 계산: ${maxWidth}x${totalHeight}`);
   let fullPageCanvas = new OffscreenCanvas(maxWidth, totalHeight);
-  let ctx = fullPageCanvas.getContext("2d");
+  let ctx = fullPageCanvas.getContext("2d", { willReadFrequently: true });
 
   let currentY = 0;
-  for (let img of images) {
-    ctx.drawImage(img, 0, currentY);
-    currentY += img.height;
+  for (let i = 0; i < images.length; i++) {
+    const img = images[i];
+    if (i === 0) {
+      ctx.drawImage(img, 0, 0);
+      currentY = img.height;
+    } else {
+      const overlapHeight = findOverlap(ctx, img, currentY);
+      console.log(`이미지 ${i + 1} 겹침 높이: ${overlapHeight}`);
+      ctx.drawImage(img, 0, currentY - overlapHeight);
+      currentY += img.height - overlapHeight;
+    }
+    console.log(`이미지 ${i + 1} 그리기 완료, 현재 Y: ${currentY}`);
   }
 
-  console.log(`최종 이미지 크기: ${maxWidth}x${totalHeight}`);
+  console.log(`최종 이미지 크기: ${maxWidth}x${currentY}`);
   return fullPageCanvas.convertToBlob();
+}
+
+function findOverlap(ctx, img, currentY) {
+  const windowHeight = 100;
+  const sampleWidth = 400;
+  const startWidth = 600; // 왼쪽에서 200픽셀 떨어진 지점부터 시작
+
+  const imgCanvas = new OffscreenCanvas(img.width, img.height);
+  const imgCtx = imgCanvas.getContext("2d", { willReadFrequently: true });
+  imgCtx.drawImage(img, 0, 0);
+
+  for (let y = 0; y < img.height - windowHeight; y++) {
+    let match = true;
+    let isMonochrome = true;
+    let firstColor = null;
+
+    for (let wy = 0; wy < windowHeight; wy++) {
+      for (let x = 0; x < sampleWidth; x++) {
+        const fullPageColor = ctx.getImageData(startWidth + x, currentY - img.height + y + wy, 1, 1).data;
+        const imgColor = imgCtx.getImageData(startWidth + x, y + wy, 1, 1).data;
+
+        if (!firstColor) {
+          firstColor = imgColor;
+        } else if (isMonochrome && !colorMatch(firstColor, imgColor)) {
+          isMonochrome = false;
+        }
+
+        if (!colorMatch(fullPageColor, imgColor)) {
+          match = false;
+          break;
+        }
+      }
+      if (!match) break;
+    }
+
+    if (match && !isMonochrome) {
+      return img.height - y;
+    }
+  }
+  return 0;
+}
+
+function colorMatch(color1, color2) {
+  return color1[0] === color2[0] && color1[1] === color2[1] && color1[2] === color2[2];
 }
 
 chrome.action.onClicked.addListener(async (tab) => {
@@ -147,6 +202,10 @@ chrome.action.onClicked.addListener(async (tab) => {
     console.log("전체 이미지 생성 시작...");
     const fullPageBlob = await createFullPageImage(captures);
     console.log("전체 이미지 생성 완료, 크기:", fullPageBlob.size);
+
+    if (fullPageBlob.size === 0) {
+      throw new Error("생성된 전체 이미지의 크기가 0입니다.");
+    }
 
     const fullPageFilename = `full-page-capture-${timestamp}-full.png`;
 

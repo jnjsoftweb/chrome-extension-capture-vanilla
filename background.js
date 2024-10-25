@@ -13,7 +13,7 @@ chrome.action.onClicked.addListener((tab) => {
       {
         url: dataUrl,
         filename: filename,
-        saveAs: true,
+        saveAs: false,
       },
       (downloadId) => {
         if (chrome.runtime.lastError) {

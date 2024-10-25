@@ -72,16 +72,6 @@ async function captureFullPage(tab) {
   return fullPageCanvas.convertToBlob();
 }
 
-function arrayBufferToBase64(buffer) {
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
 chrome.action.onClicked.addListener(async (tab) => {
   if (tab.url.startsWith("chrome://")) {
     console.log("chrome:// URL에는 접근할 수 없습니다.");
@@ -100,7 +90,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     const arrayBuffer = await blob.arrayBuffer();
 
     // ArrayBuffer를 base64 문자열로 변환
-    const base64 = arrayBufferToBase64(arrayBuffer);
+    const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(arrayBuffer)));
 
     // data URL 생성
     const dataUrl = `data:image/png;base64,${base64}`;

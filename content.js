@@ -13,8 +13,12 @@ function scrollToPosition(scrollY) {
   return { scrolled: true };
 }
 
-// 전역 스코프에 함수들을 노출
-window.pageCaptureFunctions = {
-  getScrollHeight,
-  scrollToPosition,
-};
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log("메시지 수신:", request);
+  if (request.action === "getScrollHeight") {
+    sendResponse(getScrollHeight());
+  } else if (request.action === "scrollToPosition") {
+    sendResponse(scrollToPosition(request.scrollY));
+  }
+  return true;
+});

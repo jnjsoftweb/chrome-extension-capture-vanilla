@@ -84,17 +84,29 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-async function createFullPageImage(captures, scrollWidth, scrollHeight) {
-  let fullPageCanvas = new OffscreenCanvas(scrollWidth, scrollHeight);
-  let ctx = fullPageCanvas.getContext("2d", { willReadFrequently: true });
+async function createFullPageImage(captures) {
+  // 전체 높이 계산
+  let totalHeight = 0;
+  let maxWidth = 0;
+  const images = await Promise.all(
+    captures.map(async (capture) => {
+      const img = await createImageBitmap(await (await fetch(capture.dataUrl)).blob());
+      totalHeight += img.height;
+      maxWidth = Math.max(maxWidth, img.width);
+      return img;
+    })
+  );
+
+  let fullPageCanvas = new OffscreenCanvas(maxWidth, totalHeight);
+  let ctx = fullPageCanvas.getContext("2d");
 
   let currentY = 0;
-  for (let i = 0; i < captures.length; i++) {
-    let img = await createImageBitmap(await (await fetch(captures[i].dataUrl)).blob());
+  for (let img of images) {
     ctx.drawImage(img, 0, currentY);
     currentY += img.height;
   }
 
+  console.log(`최종 이미지 크기: ${maxWidth}x${totalHeight}`);
   return fullPageCanvas.convertToBlob();
 }
 
@@ -133,8 +145,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 
     // 전체 이미지 생성 및 저장
     console.log("전체 이미지 생성 시작...");
-    const { scrollWidth, scrollHeight } = await sendMessageToContentScript(tab.id, { action: "getPageDimensions" });
-    const fullPageBlob = await createFullPageImage(captures, scrollWidth, scrollHeight);
+    const fullPageBlob = await createFullPageImage(captures);
     console.log("전체 이미지 생성 완료, 크기:", fullPageBlob.size);
 
     const fullPageFilename = `full-page-capture-${timestamp}-full.png`;
